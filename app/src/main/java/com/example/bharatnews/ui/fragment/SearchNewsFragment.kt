@@ -3,15 +3,18 @@ package com.example.bharatnews.ui.fragment
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.AbsListView
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.bharatnews.R
 import com.example.bharatnews.ViewModel.NewsViewModel
 import com.example.bharatnews.adapters.NewsAdapter
 import com.example.bharatnews.ui.NewsActivity
+import com.example.bharatnews.ui.util.Constants
 import com.example.bharatnews.ui.util.Constants.Companion.SEARCH_NEWS_TIME_DELAY
 import com.example.bharatnews.ui.util.Resource
 import kotlinx.android.synthetic.main.fragment_breaking_news.*
@@ -59,7 +62,12 @@ class SearchNewsFragment: Fragment(R.layout.fragment_search_news) {
                 is Resource.Success -> {
                     hideProgressBar()
                     response.data?.let { newsResponse ->
-                        newsAdapter.differ.submitList(newsResponse.articles)
+                        newsAdapter.differ.submitList(newsResponse.articles.toList())
+                        val totalPages=newsResponse.totalResults/ Constants.QUERY_PAGE_SIZE +2
+                        islastPage=viewModel.searchNewsPage==totalPages
+                    }
+                    if (islastPage){
+                        rvBreakingNews.setPadding(0,0,0,0)
                     }
                 }
                 is Resource.Error -> {
@@ -80,10 +88,48 @@ class SearchNewsFragment: Fragment(R.layout.fragment_search_news) {
 
     private fun hideProgressBar() {
         paginationProgressBar.visibility=View.INVISIBLE
+        isLoading=false
 
     }
     private fun showProgressBar() {
         paginationProgressBar.visibility=View.VISIBLE
+        isLoading=true
+
+    }
+    var isLoading=false
+    var islastPage=false
+    var isScrolling=false
+    val scrollListener=object : RecyclerView.OnScrollListener(){
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            super.onScrolled(recyclerView, dx, dy)
+
+            val layoutManager=recyclerView.layoutManager as LinearLayoutManager
+            val firstVisibleItemPosition =layoutManager.findFirstVisibleItemPosition()
+            val visibleItemCount=layoutManager.childCount
+            val totalItemCount=layoutManager.itemCount
+
+            val isNotLoadingAndNpotLastPage=!isLoading && !islastPage
+            val isAtLastitem=firstVisibleItemPosition+visibleItemCount>=totalItemCount
+            val isNotAtBegining=firstVisibleItemPosition>=0
+            val isTotalMoreThenVisible=totalItemCount>= Constants.QUERY_PAGE_SIZE
+            val shouldPaginate=isNotLoadingAndNpotLastPage && isAtLastitem && isNotAtBegining &&
+                    isTotalMoreThenVisible && isScrolling
+            if (shouldPaginate){
+                viewModel.searchNews(etSearch.text.toString())
+                isScrolling=false
+            }
+
+
+        }
+
+        override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+            super.onScrollStateChanged(recyclerView, newState)
+            if (newState== AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL){
+                isScrolling=true
+            }
+        }
+
+
 
     }
 
@@ -92,6 +138,7 @@ class SearchNewsFragment: Fragment(R.layout.fragment_search_news) {
        rvSearchNews.apply {
             adapter=newsAdapter
             layoutManager=LinearLayoutManager(activity)
+           addOnScrollListener(this@SearchNewsFragment.scrollListener)
         }
     }
 
